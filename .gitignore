@@ -1,0 +1,236 @@
+# ============================================================================
+# Python Environment & Virtual Environments
+# ============================================================================
+# Do NOT commit virtual environments - they are environment-specific
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.local
+.env.*.local
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ============================================================================
+# Python & Compiled Files
+# ============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ============================================================================
+# Jupyter Notebooks & Checkpoints
+# ============================================================================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+.ipynb
+
+# ============================================================================
+# Testing & Coverage
+# ============================================================================
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+htmlcov/
+.pytest_cache/
+.hypothesis/
+.coverage..*
+
+# ============================================================================
+# Unit test / coverage reports
+# ============================================================================
+htmlcov/
+.testc/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# ============================================================================
+# IDEs & Editors
+# ============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+.LSP.*
+.history/
+
+# ============================================================================
+# Node.js / Frontend
+# ============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+dist/
+out/
+.next/
+.nuxt/
+.cache/
+.vuepress/dist
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
+.env.local
+.env.*.local
+
+# ============================================================================
+# OS-Specific Files
+# ============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+*.swp
+.env.local.php
+.vscode-test
+.vscode/.VSIX
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+
+# ============================================================================
+# Machine Learning & Large Model Files
+# ============================================================================
+# PyTorch models
+*.pt
+*.pth
+*.ckpt
+
+# TensorFlow/Keras models
+*.h5
+*.hdf5
+*.pb
+*.savedmodel/
+
+# sklearn/joblib
+*.pkl
+*.pickle
+*.joblib
+
+# Other model formats
+*.bin
+*.onnx
+*.pb_text
+*.tflite
+
+# ============================================================================
+# Data Directories (typically not committed to repo)
+# ============================================================================
+# Raw data
+data/
+data_raw/
+datasets/
+raw_data/
+input_data/
+
+# Processed/output data
+processed_data/
+output/
+outputs/
+results/
+
+# Temporary working directories
+tmp/
+temp/
+scratch/
+
+# ============================================================================
+# Logs & Temporary Files
+# ============================================================================
+*.log
+logs/
+*.out
+*.err
+
+# ============================================================================
+# Poetry & Dependency Management
+# ============================================================================
+poetry.lock
+Pipfile.lock
+
+# ============================================================================
+# 3rd Party Tools
+# ============================================================================
+# git-filter-repo cache
+.git-filter-repo-cache/
+
+# ============================================================================
+# Project-Specific Exclusions
+# ============================================================================
+# Cache and artifacts generated during runs
+artifacts/
+cache/
+checkpoints/
+models/pretrained/
+model_weights/
+
+# Training outputs
+training_logs/
+experiment_runs/
+wandb/
+mlruns/
+
+# ============================================================================
+# DO NOT IGNORE - These are essential project files
+# ============================================================================
+# Make sure these are TRACKED (comment out if accidentally ignored):
+# !requirements.txt
+# !pyproject.toml
+# !setup.py
+# !README.md
+# !api/
+# !backend/
+# !frontend/
+# !scripts/
+# !docs/
+# !multimodal_coercion/
+# !*/.gitkeep

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=65"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multimodal-coercion"
+version = "0.1.0"
+description = "Multimodal Behavioral Analytics for Coercion Detection in e-Governance Land Registration Systems"
+readme = ""
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.black]
+line-length = 100
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 100
+

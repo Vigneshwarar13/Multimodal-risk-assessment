@@ -1,0 +1,11 @@
+facial_emotion:
+  path: "./models/facial_emotion"
+  labels: ["neutral", "fear", "anger", "sadness", "happiness"]
+nlp_tamil:
+  path: "./models/nlp_tamil"
+  model: "ai4bharat/indic-bert"
+whisper:
+  model: "base"
+  device: "cpu"
+calibration:
+  path: "./models/calibration"

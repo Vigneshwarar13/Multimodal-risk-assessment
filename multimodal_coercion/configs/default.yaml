@@ -1,0 +1,22 @@
+video:
+  fps: 8
+  frame_size: [224, 224]
+  detector: mediapipe
+audio:
+  sample_rate: 16000
+  vad_threshold: 0.5
+asr:
+  model: base
+  device: cpu
+nlp:
+  model_name_or_path: "ai4bharat/indicbert-base-mlm"
+  max_seq_len: 256
+fusion:
+  mode: early
+  classifier: logistic_regression
+persistence:
+  db_path: "./artifacts/sessions.db"
+  artifacts_dir: "./artifacts"
+ui:
+  enable_video: true
+  enable_audio: true
