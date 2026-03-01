@@ -1,5 +1,6 @@
 from typing import Iterator, Tuple
 from pathlib import Path
+import os
 import numpy as np
 
 
@@ -14,14 +15,15 @@ def iterate_video_frames(video_path: str) -> Iterator[Tuple[int, float, np.ndarr
         raise RuntimeError(f"Cannot open video: {video_path}")
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
     idx = 0
+    stride = max(1, int(os.getenv("FRAME_STRIDE", "5")))
     try:
         while True:
             ok, frame = cap.read()
             if not ok:
                 break
-            ts = idx / fps
-            yield idx, ts, frame
+            if idx % stride == 0:
+                ts = idx / fps
+                yield idx, ts, frame
             idx += 1
     finally:
         cap.release()
-

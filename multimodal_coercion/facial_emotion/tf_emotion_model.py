@@ -64,6 +64,12 @@ class EmotionModel:
         if labels_path.exists():
             with labels_path.open("r", encoding="utf-8") as f:
                 self.labels = json.load(f)
+        # Light CPU threading hints for faster inference on Windows CPUs
+        try:
+            tf.config.threading.set_intra_op_parallelism_threads(0)  # let TF decide
+            tf.config.threading.set_inter_op_parallelism_threads(0)
+        except Exception:
+            pass
         # Try loading Keras model first
         if paths["keras"].exists():
             self.model = tf.keras.models.load_model(paths["keras"])
@@ -90,3 +96,21 @@ class EmotionModel:
         for lbl in self.labels:
             out.setdefault(lbl, 0.0)
         return out
+
+    def predict_proba_batch(self, faces: np.ndarray) -> list[Dict[str, float]]:
+        """
+        Predict for a batch of faces of shape (N,48,48,1).
+        Returns list of dicts[label -> probability] for each face.
+        """
+        if self.model is None:
+            self.load()
+        logits = self.model.predict(faces, verbose=0)
+        outs: list[Dict[str, float]] = []
+        for row in logits:
+            probs = row.astype("float32")
+            probs = probs / (probs.sum() + 1e-8)
+            out = {lbl: float(probs[i]) for i, lbl in enumerate(self.labels[: len(probs)])}
+            for lbl in self.labels:
+                out.setdefault(lbl, 0.0)
+            outs.append(out)
+        return outs

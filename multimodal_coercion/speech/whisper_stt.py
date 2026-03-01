@@ -30,17 +30,52 @@ def convert_audio_to_wav(audio_path: str) -> str:
         raise RuntimeError(f"Failed to convert audio from {ext} to WAV: {e}")
 
 
+from functools import lru_cache
+import time
+
+def _log_stage(name: str, start: float):
+    now = time.time()
+    print(f"[whisper] {name} took {now - start:.2f}s")
+    return now
+
+
+@lru_cache(maxsize=4)
+def _load_whisper(model_name: str, device: str):
+    import whisper
+    print(f"loading whisper model {model_name} on {device}")
+    return whisper.load_model(model_name, device=device)
+
+
 def transcribe_tamil(
     audio_path: str, model_name: str = "base", device: str = "cpu"
 ) -> Dict[str, Any]:
-    import whisper
+    """Transcribe the given audio using Whisper.
 
+    The model is cached in ``_load_whisper`` so repeated calls do not
+    reload the weights.  We also log timing information so the caller can
+    see which stages are slow.
+    """
+    t0 = time.time()
     # Convert audio to WAV if needed
     wav_path = convert_audio_to_wav(audio_path)
+    t0 = _log_stage("audio conversion", t0)
 
-    model = whisper.load_model(model_name, device=device)
+    model = _load_whisper(model_name, device)
+    t0 = _log_stage("model load", t0)
+
+    # whisper.transcribe already chunks the audio; use small model set in
+    # configuration for faster performance ("tiny" or "base" generally)
     fp16 = device.startswith("cuda")
-    result = model.transcribe(wav_path, language="ta", task="transcribe", fp16=fp16)
+    result = model.transcribe(
+        wav_path,
+        language="ta",
+        task="transcribe",
+        fp16=fp16,
+        verbose=False,
+        word_timestamps=False,
+    )
+    t0 = _log_stage("transcription", t0)
+
     text = result.get("text", "").strip()
     segments = result.get("segments", [])
 
@@ -50,5 +85,4 @@ def transcribe_tamil(
             Path(wav_path).unlink()
         except Exception:
             pass
-
     return {"text": text, "segments": segments}

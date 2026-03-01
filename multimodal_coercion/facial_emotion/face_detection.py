@@ -17,7 +17,23 @@ class CV2FaceDetector:
         """
         Detect faces in a BGR frame, return list of (x, y, w, h).
         """
-        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        import os
+        h, w = frame_bgr.shape[:2]
+        max_w = int(os.getenv("FACE_RESIZE_WIDTH", "640"))
+        scale = 1.0
+        img = frame_bgr
+        if w > max_w > 0:
+            scale = w / max_w
+            new_h = int(h / scale)
+            img = cv2.resize(frame_bgr, (max_w, new_h), interpolation=cv2.INTER_AREA)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         faces = self.detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(48, 48))
-        return [(int(x), int(y), int(w), int(h)) for (x, y, w, h) in faces]
-
+        out = []
+        for (x, y, w0, h0) in faces:
+            if scale != 1.0:
+                x = int(x * scale)
+                y = int(y * scale)
+                w0 = int(w0 * scale)
+                h0 = int(h0 * scale)
+            out.append((x, y, w0, h0))
+        return out

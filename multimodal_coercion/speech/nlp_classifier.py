@@ -1,5 +1,6 @@
 from typing import Dict, Optional, Tuple
 import re
+import time
 from pathlib import Path
 import torch
 
@@ -61,6 +62,7 @@ class TamilCoercionClassifier:
             self.label2id = {v: k for k, v in self.id2label.items()}
 
     def predict(self, text: str) -> Tuple[float, str]:
+        t0 = time.time()
         if self._model is None and not self._heuristic_fallback:
             self.load()
 
@@ -73,6 +75,8 @@ class TamilCoercionClassifier:
                 padding=False,
                 return_tensors="pt"
             )
+            t1 = time.time()
+            print(f"[nlp_classifier] tokenization took {t1 - t0:.2f}s")
 
             enc = {k: v.to(self.device) for k, v in enc.items()}
 
@@ -80,6 +84,8 @@ class TamilCoercionClassifier:
                 outputs = self._model(**enc)
                 logits = outputs.logits[0]
                 probs = torch.softmax(logits, dim=-1).cpu().numpy()
+            t2 = time.time()
+            print(f"[nlp_classifier] inference took {t2 - t1:.2f}s")
 
             pred_id = int(probs.argmax())
             label = self.id2label.get(pred_id, "Neutral")
@@ -91,6 +97,7 @@ class TamilCoercionClassifier:
 
         # Heuristic fallback mode
         t = (text or "").lower()
+        print(f"[nlp_classifier] fallback mode")
 
         if re.search(r"\b(zabardasti|pressure|threat|force[d]?)\b", t):
             return 0.9, "Coercion"

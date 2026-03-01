@@ -17,20 +17,25 @@ class FrameEmotionInferer:
         faces = self.detector.detect(frame_bgr)
         if not faces:
             return {}, 0.0, 0.0
-        probs_list = []
-        stress_list = []
-        fear_list = []
+        # Batch all detected faces for a single forward pass
+        face_tensors = []
         for (x, y, w, h) in faces:
-            face_img = crop_and_preprocess(frame_bgr, x, y, w, h)
-            probs = self.model.predict_proba(face_img)
-            probs_list.append(probs)
-            stress_list.append(stress_from_emotions(probs))
-            fear_list.append(float(probs.get("fear", 0.0)))
-        if not probs_list:
+            face_tensors.append(crop_and_preprocess(frame_bgr, x, y, w, h))  # (1,48,48,1)
+        batch = np.concatenate(face_tensors, axis=0)  # (N,48,48,1)
+        probs_list = self.model.predict_proba_batch(batch)
+        # aggregate
+        sum_probs: Dict[str, float] = {}
+        stress_sum = 0.0
+        fear_sum = 0.0
+        for probs in probs_list:
+            for lbl, val in probs.items():
+                sum_probs[lbl] = sum_probs.get(lbl, 0.0) + float(val)
+            stress_sum += stress_from_emotions(probs)
+            fear_sum += float(probs.get("fear", 0.0))
+        count = len(probs_list)
+        if count == 0:
             return {}, 0.0, 0.0
-        labels = list(probs_list[0].keys())
-        avg_probs = {lbl: float(np.mean([p.get(lbl, 0.0) for p in probs_list])) for lbl in labels}
-        avg_stress = float(np.mean(stress_list)) if stress_list else 0.0
-        avg_fear = float(np.mean(fear_list)) if fear_list else 0.0
+        avg_probs = {lbl: sum_probs[lbl] / count for lbl in sum_probs}
+        avg_stress = stress_sum / count
+        avg_fear = fear_sum / count
         return avg_probs, avg_stress, avg_fear
-

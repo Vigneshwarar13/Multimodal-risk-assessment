@@ -10,6 +10,9 @@ def load_yaml(path):
         return yaml.safe_load(f)
 
 
+from functools import lru_cache
+
+
 class Config:
     def __init__(self, base_path):
         self.base_path = Path(base_path)
@@ -18,6 +21,20 @@ class Config:
         self.models = load_yaml(self.base_path / "configs" / "models.yaml")
 
 
+@lru_cache(maxsize=4)
+def get_config(base_path: str | None = None) -> "Config":
+    """Return a cached :class:`Config` instance for the given project root.
+
+    Calling code should use this helper instead of instantiating ``Config``
+    directly.  The object is expensive because it reads YAML files; a
+    subsequent call with the same ``base_path`` will return the same
+    instance.  ``base_path`` defaults to :func:`project_root` which allows
+    callers to avoid passing anything.
+    """
+    if base_path is None:
+        base_path = project_root()
+    return Config(base_path)
+
+
 def project_root():
     return Path(__file__).resolve().parents[1]
-
