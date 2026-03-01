@@ -1,0 +1,165 @@
+Multimodal‑Risk‑Assessment Technical Model Summary
+===============================================
+
+1. Facial Emotion Detection
+---------------------------
+- **Architecture**: custom convolutional neural network built with `tensorflow.keras`.
+  - Sequential model with:
+    - Input layer for (48×48×1) grayscale faces.
+    - Conv2D 32 filters, 3×3, relu, padding=same
+    - MaxPooling2D 2×2
+    - Conv2D 64 filters, 3×3, relu, padding=same
+    - MaxPooling2D 2×2
+    - Conv2D 128 filters, 3×3, relu, padding=same
+    - MaxPooling2D 2×2
+    - Flatten
+    - Dense 128 relu
+    - Dropout 0.3
+    - Dense `num_classes` softmax
+  - Defined in `multimodal_coercion/facial_emotion/tf_emotion_model.py` (function `build_cnn`) and wrapped by
+    `EmotionModel` class in same file.
+- **Training script**: `multimodal_coercion/facial_emotion/train_fer2013.py` which
+  loads `fer2013.csv` and filters to five emotion labels.
+- **Dataset source**: FER2013 (Publicly available facial expression dataset, CSV format).
+  The code comments explicitly mention FER2013 and the loader filters that dataset.
+- **Face model file location**: model directory at `./models/facial_emotion` (configured
+  in `multimodal_coercion/configs/models.yaml`).
+
+2. Speech / NLP Model for Tamil
+--------------------------------
+- **Architecture**: pre‑trained Transformer from HuggingFace.
+  - Default ID is `ai4bharat/indic-bert` (IndicBERT) – a BERT‑style model trained on
+    diverse Indian language corpora including Tamil.
+  - Loading via `transformers.AutoModelForSequenceClassification` (wrapper class
+    `TamilCoercionClassifier` in `multimodal_coercion/speech/nlp_classifier.py`).
+  - The wrapper supports custom local checkpoints (e.g. `./models/nlp_tamil`).
+- **Model type**: IndicBERT (BERT‑variant) – not LSTM/GRU; it uses the HuggingFace
+  Transformers library.
+- **Pretrained model name**: `ai4bharat/indic-bert` by default (configurable).
+- **Training data**: not included in repository. The model is assumed pre‑trained by
+  AI4Bharat on Indic corpora. No custom fine‑tuning scripts are present.
+- **Tamil-specific dataset**: None shipped; heuristics fallback uses simple regex.
+- **Speech transcription**: separate module uses OpenAI Whisper (`whisper` Python package).
+  - Model name default "base" (see `multimodal_coercion/speech/whisper_stt.py`).
+  - Whisper is pre‑trained on a large multilingual audio corpus including Tamil.
+
+3. Multimodal Fusion
+---------------------
+- **Fusion type**: weighted average of probabilities (early/decision‑level mix).
+  - `fuse_features` and `fuse_scores` in `multimodal_coercion/fusion/fusion_model.py`
+    compute 0.5*video + 0.5*speech.
+  - This is effectively a simple **weighted average** (equal weights) and therefore
+    qualifies as a form of late/decision‑level fusion.
+- **Fusion files**: exactly the above `fusion_model.py`.
+
+4. Dataset Sources
+------------------
+- **Facial emotion training**: FER2013 (assumed from training script and
+  convolutional input size). Code expects `fer2013.csv`.
+- **Speech/NLP training**: not present; uses pre‑trained IndicBERT from HuggingFace
+  (no local training). The underlying pretraining corpora include Tamil but are
+  proprietary to the model provider.
+- **Tamil-specific dataset**: no dataset files included; heuristics in `nlp_classifier`
+  use hard‑coded Tamil keywords. Whisper also transcribes Tamil using its own
+  training data.
+
+5. Key File Locations
+----------------------
+- **Face model definition**: `multimodal_coercion/facial_emotion/tf_emotion_model.py`
+  (CNN build function & `EmotionModel` wrapper).
+- **Speech model definition**: `multimodal_coercion/speech/nlp_classifier.py`
+  (`TamilCoercionClassifier` class).
+- **Fusion logic**: `multimodal_coercion/fusion/fusion_model.py`.
+
+6. Libraries & Dependencies
+---------------------------
+The project relies on a range of external Python packages listed in
+`multimodal_coercion/requirements.txt` and imported throughout the codebase.
+These include (alphabetical):
+
+- absl-py
+- anyio
+- astunparse
+- audioread
+- cffi
+- contourpy
+- cycler
+- fastapi
+- ffmpeg-python
+- fonttools
+- future
+- fsspec
+- gast
+- gitpython (pulled in by streamlit)
+- grpcio
+- h5py
+- huggingface-hub
+- httpcore
+- httpx
+- joblib
+- keras
+- kiwisolver
+- libclang
+- librosa
+- llvmlite
+- markdown / markdown-it-py
+- matplotlib
+- mediapipe
+- more-itertools
+- mpmath
+- msgpack
+- networkx
+- numba
+- numpy
+- opt-einsum / opt_einsum
+- opencv-contrib-python / opencv-python
+- pandas
+- plotly
+- pooch
+- protobuf (implicitly via tensorflow)
+- pyarrow (via streamlit)
+- pycparser
+- pydantic / pydantic-core
+- pygments
+- pyparsing
+- python-multipart
+- pyyaml
+- regex
+- rich
+- scikit-learn
+- scipy
+- seaborn
+- sentencepiece
+- shellingham
+- sounddevice
+- soundfile
+- soxr
+- starlette
+- sympy
+- tensorboard / tensorboard-data-server
+- tensorflow
+- termcolor
+- threadpoolctl
+- tiktoken
+- tokenizers
+- torch
+- torchvision
+- tornado (via streamlit)
+- tqdm
+- transformers
+- typer / typer-slim
+- uvicorn
+- werkzeug
+- wheel
+- whisper (openai-whisper)
+
+The code also imports standard‑library modules such as `os`, `sys`, `tempfile`,
+`time`, `re`, `uuid`, `argparse`, `json`, `logging`, `subprocess`, `sqlite3`,
+`pathlib`, `typing`, etc.
+
+These packages support functionality across the API server, UI, audio
+processing, machine learning models, and utilities.
+
+
+This summary captures the architectures, pretrained models, fusion strategy, and
+dataset origins used by the project.
