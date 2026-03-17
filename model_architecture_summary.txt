@@ -73,93 +73,42 @@ Multimodal‑Risk‑Assessment Technical Model Summary
 
 6. Libraries & Dependencies
 ---------------------------
-The project relies on a range of external Python packages listed in
-`multimodal_coercion/requirements.txt` and imported throughout the codebase.
-These include (alphabetical):
+The project’s primary dependencies are declared in `multimodal_coercion/requirements.txt`.
+The packages listed there are used across the codebase as follows:
 
-- absl-py
-- anyio
-- astunparse
-- audioread
-- cffi
-- contourpy
-- cycler
-- fastapi
-- ffmpeg-python
-- fonttools
-- future
-- fsspec
-- gast
-- gitpython (pulled in by streamlit)
-- grpcio
-- h5py
-- huggingface-hub
-- httpcore
-- httpx
-- joblib
-- keras
-- kiwisolver
-- libclang
-- librosa
-- llvmlite
-- markdown / markdown-it-py
-- matplotlib
-- mediapipe
-- more-itertools
-- mpmath
-- msgpack
-- networkx
-- numba
-- numpy
-- opt-einsum / opt_einsum
-- opencv-contrib-python / opencv-python
-- pandas
-- plotly
-- pooch
-- protobuf (implicitly via tensorflow)
-- pyarrow (via streamlit)
-- pycparser
-- pydantic / pydantic-core
-- pygments
-- pyparsing
-- python-multipart
-- pyyaml
-- regex
-- rich
-- scikit-learn
-- scipy
-- seaborn
-- sentencepiece
-- shellingham
-- sounddevice
-- soundfile
-- soxr
-- starlette
-- sympy
-- tensorboard / tensorboard-data-server
-- tensorflow
-- termcolor
-- threadpoolctl
-- tiktoken
-- tokenizers
-- torch
-- torchvision
-- tornado (via streamlit)
-- tqdm
-- transformers
-- typer / typer-slim
-- uvicorn
-- werkzeug
-- wheel
-- whisper (openai-whisper)
+- **Facial emotion detection + preprocessing**: `tensorflow`, `opencv-python`, `numpy`, `pandas`, `mediapipe`, `matplotlib`, `seaborn`, `scikit-learn`, `joblib`, `ffmpeg-python`.
+- **Speech/NLP (Tamil)**: `torch`, `torchvision`, `transformers`, `sentencepiece`, `tokenizers`, `scipy`, `librosa`, `soundfile`, `openai-whisper`.
+- **API / Web UI**: `fastapi`, `uvicorn`, `streamlit`, `python-multipart`.
+- **Configuration / utilities**: `pyyaml`, `rich`, `tqdm`, `numpy`.
 
-The code also imports standard‑library modules such as `os`, `sys`, `tempfile`,
-`time`, `re`, `uuid`, `argparse`, `json`, `logging`, `subprocess`, `sqlite3`,
-`pathlib`, `typing`, etc.
+The dependency list in `multimodal_coercion/requirements.txt` is:
 
-These packages support functionality across the API server, UI, audio
-processing, machine learning models, and utilities.
+- numpy>=1.26
+- scipy>=1.11
+- pandas>=2.1
+- opencv-python>=4.8
+- mediapipe>=0.10
+- tensorflow>=2.14
+- torch>=2.1
+- torchvision>=0.16
+- transformers>=4.36
+- sentencepiece>=0.1.99
+- tokenizers>=0.15
+- openai-whisper>=20231117
+- librosa>=0.10
+- soundfile>=0.12
+- streamlit>=1.29
+- scikit-learn>=1.3
+- pyyaml>=6.0
+- matplotlib>=3.8
+- seaborn>=0.13
+- joblib>=1.3
+- fastapi>=0.110
+- uvicorn>=0.24
+- python-multipart>=0.0.9
+- ffmpeg-python>=0.2.0
 
+There may be additional transitive dependencies brought in by these core libraries.
 
 This summary captures the architectures, pretrained models, fusion strategy, and
 dataset origins used by the project.
