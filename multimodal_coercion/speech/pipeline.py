@@ -34,6 +34,18 @@ def _whisper_params(model_name: str, device: str):
 
 
 def run_speech_pipeline(audio_path: str) -> Dict[str, Any]:
+    """
+    Run speech processing pipeline: STT → text cleaning → NLP coercion classification.
+    
+    Returns:
+        Dict with:
+        - transcript: Cleaned transcribed text
+        - nlp_prob: NLP coercion probability (0-1)
+        - label: Coercion label (Genuine Consent / Neutral / Coercion)
+        - transcription_confidence: Whisper confidence (0-1)
+        - transcription_reliable: Whether confidence passes threshold
+        - timestamps: Empty list (for future per-token timing)
+    """
     p = Path(audio_path)
     if not p.exists():
         raise FileNotFoundError(str(p))
@@ -45,8 +57,15 @@ def run_speech_pipeline(audio_path: str) -> Dict[str, Any]:
     asr_cfg = cfg.models.get("whisper", {})
     model_name = asr_cfg.get("model", "base")
     device = asr_cfg.get("device", "cpu")
-    # use cached whisper parameters (loads model lazily)
-    stt = transcribe_tamil(str(p), model_name=model_name, device=device)
+    confidence_threshold = asr_cfg.get("confidence_threshold", 0.6)
+    
+    # Transcribe with confidence estimation
+    stt = transcribe_tamil(
+        str(p),
+        model_name=model_name,
+        device=device,
+        confidence_threshold=confidence_threshold
+    )
     t0 = _log_stage("asr", t0)
 
     transcript = clean_tamil_text(stt.get("text", ""))
@@ -63,5 +82,7 @@ def run_speech_pipeline(audio_path: str) -> Dict[str, Any]:
         "transcript": transcript,
         "nlp_prob": float(coercion_prob),
         "label": label,
+        "transcription_confidence": stt.get("confidence", 0.5),
+        "transcription_reliable": stt.get("is_reliable", False),
         "timestamps": [],
     }

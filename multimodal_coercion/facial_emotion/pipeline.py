@@ -30,18 +30,23 @@ def _get_model(model_dir: Optional[str] = None) -> EmotionModel:
 
 
 def infer_emotion_on_frame(
-    frame_bgr: np.ndarray, model_dir: Optional[str] = None
-) -> Tuple[Dict[str, float], Dict[str, float]]:
+    frame_bgr: np.ndarray, model_dir: Optional[str] = None, return_gradcam: bool = False
+) -> Dict[str, Any]:
     """
     Run face detection and emotion inference on a single BGR image frame.
-    Returns tuple of:
+    Returns dictionary with:
       - emotions: dict[label -> probability]
       - stress_metrics: dict with 'stress_prob' and 'fear_prob'
+      - gradcam: Optional 2D heatmap array (if return_gradcam=True)
     """
     det = _get_detector()
     faces = det.detect(frame_bgr)
     if not faces:
-        return {}, {"stress_prob": 0.0, "fear_prob": 0.0}
+        return {
+            "emotions": {},
+            "stress_metrics": {"stress_prob": 0.0, "fear_prob": 0.0},
+            "gradcam": None,
+        }
     x, y, w, h = faces[0]
     face_img = crop_and_preprocess(frame_bgr, x, y, w, h)
     model = _get_model(model_dir)
@@ -50,7 +55,18 @@ def infer_emotion_on_frame(
         "stress_prob": stress_from_emotions(probs),
         "fear_prob": float(probs.get("fear", 0.0)),
     }
-    return probs, metrics
+    gradcam_map = None
+    if return_gradcam:
+        try:
+            gradcam_map = model.compute_gradcam(face_img)
+        except Exception as e:
+            gradcam_map = None
+
+    return {
+        "emotions": probs,
+        "stress_metrics": metrics,
+        "gradcam": gradcam_map,
+    }
 
 
 def run_video_pipeline(video_path: Optional[str] = None, enable_camera: bool = False) -> Dict[str, Any]:

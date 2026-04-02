@@ -61,16 +61,29 @@ def _log_stage(name: str, start: float):
     return now
 
 
-def analyze_intent_score(text: str, model_id: str = "ai4bharat/indic-bert") -> Tuple[float, str, bool]:
-    """Compute willingness/coercion score using lightweight heuristics + HF model.
+def detect_dialect_hint(text: str) -> str:
+    """Return a dialect hint from text if recognizable."""
+    t = (text or "").lower()
+    if re.search(r"\b(லவ்|வீட்டுல|ஓஹோ)\b", t):
+        return "Tamil (Southern/Dialectal)"
+    if re.search(r"\b(அரு|அதில்|என்னோ)\b", t):
+        return "Tamil (Standard)"
+    return "Unknown"
 
-    The expensive transformer is loaded only once per ``model_id`` via a
-    simple LRU cache. We also emit timing logs that can be observed in the
-    server console.
+
+def analyze_intent_score(text: str, model_id: str = "ai4bharat/indic-bert") -> Tuple[float, str, bool, float, bool, str]:
+    """Compute willingness/coercion score + confidence + dialect fallback.
+
+    Returns:
+      score, sentiment, coercion_flag, nlp_confidence, dialect_fallback, dialect_hint
     """
     t0 = time.time()
     base_score, coer_flag, hes_flag = _pattern_score(text or "")
     t0 = _log_stage("pattern base_score", t0)
+
+    dialect_hint = detect_dialect_hint(text)
+    dialect_fallback = False
+    nlp_confidence = 0.5
 
     try:
         tok, mdl, device = _load_intent_model(model_id)
@@ -83,16 +96,24 @@ def analyze_intent_score(text: str, model_id: str = "ai4bharat/indic-bert") -> T
             if hasattr(out, "last_hidden_state"):
                 cls_vec = out.last_hidden_state[:, 0, :]  # [CLS]
                 mag = float(torch.norm(cls_vec, dim=-1).mean().detach().cpu())
-                conf = 1.0 / (1.0 + torch.exp(-torch.tensor(mag / 100.0))).item()
+                nlp_confidence = float(1.0 / (1.0 + torch.exp(-torch.tensor(mag / 100.0)).item()))
             else:
-                conf = 0.5
-        score = 0.7 * base_score + 0.3 * conf
+                nlp_confidence = 0.5
+
+            # If confidence low, fallback to pattern-based score
+            if nlp_confidence < 0.55:
+                score = base_score
+                dialect_fallback = True
+            else:
+                score = 0.7 * base_score + 0.3 * nlp_confidence
         t0 = _log_stage("inference", t0)
-    except Exception:
+    except Exception as e:
         score = base_score
-        t0 = _log_stage("inference failed", t0)
+        nlp_confidence = 0.0
+        dialect_fallback = True
+        t0 = _log_stage(f"inference failed: {e}", t0)
 
     score = max(0.0, min(1.0, float(score)))
     sentiment = "Positive" if score >= 0.6 else "Neutral" if score >= 0.4 else "Negative"
-    return score, sentiment, bool(coer_flag)
+    return score, sentiment, bool(coer_flag), nlp_confidence, dialect_fallback, dialect_hint
 

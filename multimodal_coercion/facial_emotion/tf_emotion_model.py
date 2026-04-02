@@ -114,3 +114,107 @@ class EmotionModel:
                 out.setdefault(lbl, 0.0)
             outs.append(out)
         return outs
+
+    def _get_last_conv_layer(self):
+        """Return the last Conv2D layer in the model."""
+        if self.model is None:
+            raise ValueError("Model is not loaded")
+        for layer in reversed(self.model.layers):
+            if isinstance(layer, tf.keras.layers.Conv2D):
+                return layer
+        raise ValueError("No Conv2D layer found in model")
+
+    def compute_gradcam(self, face_tensor: np.ndarray, class_index: Optional[int] = None) -> np.ndarray:
+        """
+        Compute Grad-CAM heatmap for a single preprocessed face tensor.
+
+        face_tensor: shape (1, H, W, 1), values in [0, 1]
+        class_index: optional class index to explain. If None uses model argmax.
+
+        Returns heatmap numpy array shape (H, W) with values in [0,1].
+        """
+        if self.model is None:
+            self.load()
+
+        if face_tensor.ndim != 4 or face_tensor.shape[0] != 1:
+            raise ValueError("face_tensor must be shape (1,H,W,1)")
+
+        # Determine target class
+        preds = self.model.predict(face_tensor, verbose=0)
+        preds = preds.astype("float32")
+        if class_index is None:
+            class_index = int(np.argmax(preds[0]))
+
+        # Identify last Conv2D layer
+        last_conv_layer = self._get_last_conv_layer()
+
+        # Create a model that outputs conv feature maps and predictions
+        grad_model = tf.keras.models.Model(
+            [self.model.inputs],
+            [last_conv_layer.output, self.model.output],
+        )
+
+        # Compute gradient of class output w.r.t. last conv layer
+        with tf.GradientTape() as tape:
+            conv_output, model_output = grad_model(face_tensor)
+            tape.watch(conv_output)
+            class_score = model_output[:, class_index]
+
+        grads = tape.gradient(class_score, conv_output)
+
+        if grads is None:
+            raise RuntimeError("Could not compute gradients for Grad-CAM")
+
+        # Global average pooling over spatial dimensions
+        pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+
+        conv_output = conv_output[0]  # HxWxC
+        pooled_grads = pooled_grads
+
+        # Weight channels by importance
+        weighted_features = tf.multiply(conv_output, pooled_grads)
+        cam = tf.reduce_sum(weighted_features, axis=-1)
+
+        # ReLU and normalize
+        cam = tf.nn.relu(cam)
+        cam = cam.numpy()
+
+        if np.max(cam) > 0:
+            cam = cam / (np.max(cam) + 1e-8)
+        else:
+            cam = np.zeros_like(cam, dtype=np.float32)
+
+        # Resize to input dimensions
+        target_size = (face_tensor.shape[1], face_tensor.shape[2])
+        cam = tf.image.resize(cam[..., np.newaxis], target_size, method="bilinear").numpy()
+        cam = np.squeeze(cam)
+
+        # Ensure [0,1]
+        cam = np.clip(cam, 0.0, 1.0).astype("float32")
+        return cam
+
+    def overlay_gradcam(
+        self,
+        face_tensor: np.ndarray,
+        gradcam_heatmap: np.ndarray,
+        alpha: float = 0.5,
+    ) -> np.ndarray:
+        """
+        Overlay a Grad-CAM heatmap on grayscale face tensor (for visualization).
+
+        Returns RGB image shape (H, W, 3) in uint8.
+        """
+        import cv2
+
+        if face_tensor.ndim != 4 or face_tensor.shape[0] != 1:
+            raise ValueError("face_tensor must be shape (1,H,W,1)")
+
+        gray = np.squeeze(face_tensor[0])
+        gray_255 = (gray * 255.0).astype("uint8")
+        gray_rgb = cv2.cvtColor(gray_255, cv2.COLOR_GRAY2BGR)
+
+        heatmap = (gradcam_heatmap * 255.0).astype("uint8")
+        heatmap_color = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+
+        overlay = cv2.addWeighted(gray_rgb, 1.0 - alpha, heatmap_color, alpha, 0)
+        return overlay

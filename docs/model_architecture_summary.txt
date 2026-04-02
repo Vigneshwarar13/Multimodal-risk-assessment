@@ -1,0 +1,624 @@
+================================================================================
+MULTIMODAL RISK ASSESSMENT SYSTEM - MODEL ARCHITECTURE SUMMARY
+================================================================================
+
+Project Name:     Multimodal Risk Assessment for Speech-Based Coercion Detection
+Version:          1.0.0
+Last Updated:     April 2, 2026
+Status:           Production Ready
+
+Purpose:  Detect coercion during Tamil Nadu e-governance land registration by
+          analyzing video recordings to determine if consent is genuine or forced.
+
+Output:   Risk classification (Good / Average / Poor) with explainability insights
+
+
+================================================================================
+1. INPUT LAYER
+================================================================================
+
+Input Format:
+  - Single video file (MP4, AVI, MOV, or other ffmpeg-compatible format)
+  - Recorded during land registration ceremony
+  - No separate audio upload required - audio extracted directly from video
+
+Processing Tools:
+  - ffmpeg-python (video demuxing)
+  - OpenCV (cv2) (frame extraction)
+  - scipy (audio preprocessing)
+
+
+================================================================================
+2. FACIAL EMOTION DETECTION MODULE
+================================================================================
+
+Location:  multimodal_coercion/facial_emotion/tf_emotion_model.py
+
+Framework:  TensorFlow / Keras (Sequential model)
+
+Input Specification:
+  - Format: 48 x 48 x 1 grayscale images
+  - Source: Detected faces via MediaPipe landmarks
+
+Architecture:
+  - Layer 1:   Conv2D(32, kernel=3x3, relu, padding=same)
+  - Layer 2:   MaxPooling2D(2x2)
+  - Layer 3:   Conv2D(64, kernel=3x3, relu, padding=same)
+  - Layer 4:   MaxPooling2D(2x2)
+  - Layer 5:   Conv2D(128, kernel=3x3, relu, padding=same)
+  - Layer 6:   MaxPooling2D(2x2)
+  - Layer 7:   Flatten
+  - Layer 8:   Dense(128, relu)
+  - Layer 9:   Dropout(0.3)
+  - Layer 10:  Dense(num_classes, softmax)
+
+Output Classes (5 emotions):
+  1. Fear
+  2. Anxiety
+  3. Distress
+  4. Neutral
+  5. Surprise
+
+Training Data:
+  - Dataset: FER2013 (publicly available)
+  - Source file: fer2013.csv (13,000+ 48x48 grayscale face images)
+  - Original: 7 emotion classes (filtered to 5 for coercion detection)
+
+Training Script:
+  - Location: multimodal_coercion/facial_emotion/train_fer2013.py
+
+Face Detection:
+  - Tool: MediaPipe Holistic
+  - Purpose: Landmark extraction before CNN inference
+  - Input: Video frame
+  - Output: Cropped 48x48 face region
+
+Output:
+  - Format: Normalized facial stress score (0-100)
+  - Interpretation: Higher = more stress/fear detected
+
+Explainability:
+  - Method: Grad-CAM (Gradient-weighted Class Activation Mapping)
+  - Layer: Last Conv2D layer before Flatten
+  - Output: Visual heatmap showing attention regions
+  - Saved to: outputs/gradcam/
+
+Model Storage:
+  - Location: models/facial_emotion/
+
+
+================================================================================
+3. TAMIL SPEECH PROCESSING MODULE
+================================================================================
+
+Location:  multimodal_coercion/speech/whisper_stt.py (transcription)
+           multimodal_coercion/speech/nlp_classifier.py (classification)
+
+STEP 1 - SPEECH TO TEXT CONVERSION
+------------------------------------
+
+Tool: OpenAI Whisper
+
+Configuration:
+  - Model size: "base" (multilingual variant)
+  - Supports: Tamil, Hindi, English, and 90+ languages
+  - Audio input: Extracted from video file via ffmpeg
+
+Fine-tuning:
+  - Optional dialect-specific model available
+  - Location: models/whisper_tamil_dialect/
+  - Fallback: Uses base Whisper if custom model not found
+
+Audio Preprocessing:
+  - Noise reduction via scipy.signal (median filtering)
+  - Resampling: 16 kHz mono
+  - Purpose: Improve transcription accuracy in noisy recordings
+
+Output: TranscriptionResult dataclass
+  - Field: text (str)
+    * Transcribed Tamil text from audio
+  - Field: confidence (float)
+    * Average token log-probability (0.0 to 1.0)
+    * Averaged across all segments
+  - Field: is_reliable (bool)
+    * True if confidence >= 0.6
+    * False if confidence < 0.6 (triggers confidence gating)
+  - Field: segments (list)
+    * Individual segment text and start/end timestamps
+  - Field: segment_confidences (list)
+    * Per-segment confidence scores
+
+
+STEP 2 - TAMIL NLP COERCION CLASSIFICATION
+---------------------------------------------
+
+Framework: HuggingFace Transformers (PyTorch backend)
+
+Base Model: ai4bharat/indic-bert
+  - Type: SequenceClassification (BERT-style encoder)
+  - Language: Pre-trained on Indic language corpora (including Tamil)
+  - Repository: HuggingFace Model Hub
+
+Custom Implementation: TamilCoercionClassifier
+  - Location: multimodal_coercion/speech/nlp_classifier.py
+  - Checkpoint: Optional custom fine-tuned version
+  - Location: models/nlp_tamil/
+  - Fallback: Base IndicBERT if no custom checkpoint found
+
+Detection Targets:
+  - Hesitation language patterns
+  - Coercion-related vocabulary
+  - Forced compliance phrases
+  - Emotional tone shifts
+  - Sarcasm or contradictory statements
+
+Output:
+  - Format: Speech coercion score (0-100)
+  - Interpretation: Higher = more coercion patterns detected
+
+Confidence & Fallback:
+  - Model confidence tracked during inference
+  - If confidence < 0.55 → Pattern-based heuristic fallback activated
+  - Fallback uses hard-coded Tamil coercion keyword list
+  - Graceful degradation: system still produces score if model unavailable
+
+Explainability: SHAP Explainer
+  - Method: Kernel SHAP with masking
+  - Purpose: Token-level importance for model decision
+  - Function: explain_prediction(text) → returns dict
+  - Output format:
+    * "prediction_score": float (0-1 coercion probability)
+    * "label": str (Coercion / Genuine Consent / Neutral)
+    * "top_tokens": list of {token, shap_value}
+    * Top 5 tokens ranked by absolute SHAP value
+
+Background Data:
+  - Uses DEFAULT_TAMIL_BACKGROUND corpus
+  - 10 neutral Tamil phrases for baseline comparison
+
+
+================================================================================
+4. BASELINE CALIBRATION MODULE
+================================================================================
+
+Location:  multimodal_coercion/calibration/baseline.py
+
+Class: BaselineCalibrator
+
+Purpose:  Reduce false positives from naturally nervous individuals
+          Establish personal emotional baseline before actual registration
+
+Calibration Process:
+
+  Phase 1 - Personal Baseline (Pre-Registration)
+    - 3 neutral questions asked to registrant
+    - Typical questions: name verification, land location, ownership period
+    - No coercive context
+    - Extract facial emotion frame scores and speech tone scores
+    - Compute average baseline for each modality
+    - Store baseline to artifacts/baselines/{user_id}_baseline.json
+
+  Phase 2 - Registration Session (Actual Recording)
+    - Process video as normal
+    - Compute facial and speech scores
+    - Apply calibration formula:
+        calibrated_score = (session_score - baseline_score) / (1 - baseline_score)
+    - Rescale to 0-100 range (clips at boundaries)
+
+Persistence:
+  - Format: JSON file per user
+  - Storage: artifacts/baselines/{user_id}_baseline.json
+  - Fields: {"facial_baseline": float, "speech_baseline": float, "timestamp": str}
+
+Reset Behavior:
+  - Baseline resets between each new registration session
+  - Re-established for each session to maintain freshness
+
+
+================================================================================
+5. TEMPORAL CONSISTENCY MODULE
+================================================================================
+
+Location:  multimodal_coercion/facial_emotion/temporal_consistency.py
+
+Class: TemporalConsistencyChecker
+
+Purpose:  Detect coached or rehearsed responses - identify artificial emotional
+          suppression or unnaturally flat responses
+
+Detection Method:
+
+  Input: Time-series arrays of scores
+    - facial_scores: List of emotion scores per frame (across video duration)
+    - speech_scores: List of coercion scores per segment
+
+  Computation:
+    - Facial variance: numpy.var() of all emotion scores across frames
+    - Speech variance: numpy.var() of all sentiment scores across segments
+    - Drift analysis: Comparing variance in first half vs second half
+    - Overall inconsistency score: Combined metric (0-1)
+
+  Thresholds:
+    - Consistent: variance above threshold, natural emotion flow
+    - Moderate: borderline variance, some coached behavior possible
+    - Inconsistent: variance below threshold, coached/rehearsed detected
+    - No Data: Insufficient video frames or segments
+
+Output: Dictionary
+  - "is_coached": bool (True if unnaturally flat)
+  - "facial_variance": float (emotion variance metric)
+  - "speech_variance": float (sentiment variance metric)
+  - "stress_drift": float (first-half vs second-half drift)
+  - "fear_drift": float (fear consistency across video)
+  - "status": str (Consistent / Moderate / Inconsistent / No Data)
+  - "inconsistency_score": float (0-1, higher = more coached)
+
+
+================================================================================
+6. MULTIMODAL FUSION MODULE
+================================================================================
+
+Location:  multimodal_coercion/fusion/fusion_model.py
+
+Class: MetaLearnerFusion
+
+Strategy: Weighted late fusion (decision-level combination)
+
+Fusion Mode 1 - Default (Equal Weights)
+  Condition: No trained meta-learner model found
+  Formula: final_score = 0.5 * facial_score + 0.5 * speech_score
+  Weights: Facial=0.5, Speech=0.5 (uniform)
+
+Fusion Mode 2 - Learned Weights (Meta-Learner)
+  Condition: Trained model exists in models/fusion/meta_learner.pkl
+  Algorithm: LogisticRegression meta-learner
+  Training: train_meta_learner(X, y)
+    - X: [facial_score, speech_score] pairs from labeled sessions
+    - y: true coercion labels (0 or 1)
+    - Learns optimal weights for this deployment
+  Learning Benefit:
+    - If facial more predictive → weight increases (e.g., 0.7)
+    - If speech more predictive → weight increases (e.g., 0.7)
+    - Adapts to local coercion patterns
+  Persistence: models/fusion/meta_learner.pkl (joblib serialization)
+  Fallback: Reverts to equal weights if model loading fails
+
+Confidence-Aware Dynamic Weighting
+  Trigger: TranscriptionResult.is_reliable = False
+    (confidence < 0.6 threshold)
+  Adjusted Weights (speech unreliable):
+    - Facial weight: 0.8
+    - Speech weight: 0.2
+  Purpose: Reduce speech score impact when transcription quality poor
+
+FusionResult Output:
+  - "score": float (0-100 final risk score)
+  - "confidence": float (0-1 fusion confidence)
+  - "weights": dict ({"facial": float, "speech": float})
+  - "model_used": str (equal_weights / meta_learner)
+
+
+================================================================================
+7. RISK CLASSIFICATION
+================================================================================
+
+Risk Scoring: 0-100 scale (mapped to 3 categories)
+
+Risk Categories:
+
+  GOOD (Low Risk)
+    Range: 0-33
+    Indication: Genuine consent detected
+    Action: Registration proceeds to next stage
+    Confidence: High confidence in willingness
+
+  AVERAGE (Medium Risk)
+    Range: 34-66
+    Indication: Ambiguous or borderline coercion signals
+    Action: Re-verification scheduled after defined period (typically 7-30 days)
+    Confidence: Moderate confidence, requires follow-up
+
+  POOR (High Risk)
+    Range: 67-100
+    Indication: Strong coercion indicators detected
+    Action: Mandatory authority intervention triggered
+    Confidence: High confidence in coercion presence
+    Follow-up: Investigation by authorized personnel
+
+
+================================================================================
+8. BACKEND API SERVER
+================================================================================
+
+Location:  backend/
+
+Framework: FastAPI (Python async web framework)
+
+Server: Uvicorn (ASGI server)
+  - Default: http://127.0.0.1:8000
+
+Key Dependencies:
+  - python-multipart (handles file upload encoding)
+  - pydantic (data validation)
+
+Responsibilities:
+  1. Accept video file uploads from frontend
+  2. Orchestrate pipeline execution
+  3. Manage temporary file storage
+  4. Execute facial, speech, fusion modules in sequence
+  5. Return structured JSON results to frontend
+  6. Handle errors gracefully (no model found, bad audio, etc.)
+
+Key Endpoints:
+  - POST /analyze (video upload + processing)
+  - GET /results/{session_id}
+  - POST /baseline (calibration enrollment)
+
+
+================================================================================
+9. FRONTEND USER INTERFACE
+================================================================================
+
+Location:  frontend/
+
+Framework: Streamlit (rapid prototyping Python web UI library)
+
+Server: Streamlit development server
+  - Default: http://127.0.0.1:8501
+  - Auto-reload on file changes
+
+Main Pages:
+
+  PAGE 1 - Upload & Live Analysis
+    - Video file uploader widget
+    - Start analysis button
+    - Live progress bar (processing stages)
+    - Risk score display (color-coded: green/yellow/red)
+    - Loading spinner during processing
+
+  PAGE 2 - Analysis Report (pages/analysis_report.py)
+    Components:
+    - Facial emotion score (0-100, bar chart)
+    - Speech coercion score (0-100, bar chart)
+    - Final risk score with category badge (Good/Average/Poor)
+    - Risk color coding:
+        * Green = Good
+        * Yellow = Average
+        * Red = Poor
+    - Grad-CAM heatmap image (visual attention regions)
+    - SHAP token importance chart (horizontal bar, top 5 tokens)
+    - Temporal consistency result (Coached / Natural status)
+    - Transcription confidence (progress bar, 0-100%)
+    - Baseline vs session score comparison (line chart)
+    - Collapsible sections via st.expander() for organized layout
+    - Export results as PDF/JSON
+
+
+================================================================================
+10. KEY LIBRARIES AND DEPENDENCIES
+================================================================================
+
+Vision and Facial Processing:
+  - tensorflow >= 2.14 (neural network framework)
+  - keras (integrated in TensorFlow)
+  - opencv-python >= 4.8 (image processing)
+  - mediapipe >= 0.10 (face landmarks)
+  - numpy >= 1.26 (numerical arrays)
+  - matplotlib >= 3.8 (visualization)
+  - seaborn >= 0.13 (statistical plots)
+
+Speech and NLP:
+  - torch >= 2.1 (PyTorch deep learning)
+  - torchvision >= 0.16
+  - transformers >= 4.36 (HuggingFace models)
+  - openai-whisper >= 20231117 (speech-to-text)
+  - librosa >= 0.10 (audio signal processing)
+  - soundfile >= 0.12 (audio file I/O)
+  - scipy >= 1.11 (signal processing, noise reduction)
+  - sentencepiece >= 0.1.99 (tokenization)
+  - tokenizers >= 0.15 (fast tokenization)
+
+Explainability:
+  - shap (SHAP values for model interpretation)
+
+Machine Learning:
+  - scikit-learn >= 1.3 (meta-learner, utilities)
+  - joblib >= 1.3 (model serialization)
+
+API and Web Framework:
+  - fastapi >= 0.110 (backend API)
+  - uvicorn >= 0.24 (ASGI server)
+  - python-multipart >= 0.0.9 (file upload handling)
+  - streamlit >= 1.29 (frontend UI)
+
+Audio and Video:
+  - ffmpeg-python >= 0.2.0 (video demuxing)
+  - pandas >= 2.1 (data manipulation)
+
+Configuration and Utilities:
+  - pyyaml >= 6.0 (YAML config parsing)
+  - rich (formatted console output)
+  - tqdm (progress bars)
+
+
+================================================================================
+11. DATASET SOURCES
+================================================================================
+
+Facial Emotion Training Data:
+
+  Dataset: FER2013 (Facial Expression Recognition)
+  - Source: Kaggle public dataset
+  - Format: CSV file (fer2013.csv)
+  - Images: 13,000+ 48x48 grayscale face photographs
+  - Original Classes: 7 emotions (anger, disgust, fear, happy, neutral, sad,
+                                   surprise)
+  - Classes Used: 5 emotions (fear, anxiety, distress, neutral, surprise)
+  - License: Public domain / research use
+
+Tamil NLP Coercion Classification:
+
+  Model: ai4bharat/indic-bert
+  - Source: HuggingFace Model Hub (ai4bharat organization)
+  - Pretraining: Multimodal Indic language corpus
+    * Languages: Tamil, Telugu, Kannada, Gujarati, Hindi, etc.
+    * Size: Proprietary corpus by AI4Bharat
+  - No custom coercion-specific dataset currently available
+  - Fallback: Hard-coded Tamil coercion keyword heuristics in code
+  - Future: Fine-tuning on registered coercion cases (requires privacy approval)
+
+Tamil Speech Recognition:
+
+  Model: OpenAI Whisper (multilingual)
+  - Source: OpenAI (publicly released)
+  - Training Data: 680,000 hours of multilingual speech (proprietary collection)
+  - Included Languages: Tamil transcription support via multilingual component
+  - Optional Fine-tuning: Custom dialect model can be trained
+    * Location: models/whisper_tamil_dialect/
+    * Requires: Labeled Tamil speech audio directory
+
+
+================================================================================
+12. MODEL FILE LOCATIONS AND STORAGE
+================================================================================
+
+Model Type                  Location
+---------------------------  -------------------------------------------------
+CNN Facial Emotion          models/facial_emotion/
+                            [model.h5 or saved_model format]
+
+IndicBERT Tamil NLP         models/nlp_tamil/
+                            [checkpoint directory with pytorch_model.bin]
+                            [optional custom fine-tuned version]
+
+Whisper Tamil Dialect       models/whisper_tamil_dialect/
+                            [optional dialect-specific model]
+                            [falls back to base Whisper if missing]
+
+Meta-Learner Fusion         models/fusion/meta_learner.pkl
+                            [joblib serialized LogisticRegression]
+
+User Baselines              multimodal_coercion/artifacts/baselines/
+                            {user_id}_baseline.json
+                            [JSON per user with calibration values]
+
+Grad-CAM Outputs            outputs/gradcam/
+                            [PNG heatmap images per session]
+
+Transcripts                 multimodal_coercion/artifacts/
+                            [temporary transcript files]
+
+
+================================================================================
+13. PIPELINE EXECUTION FLOW (END-TO-END)
+================================================================================
+
+Step 1: Video File Intake
+  - Frontend: User uploads video file (MP4/AVI)
+  - Backend: Receives multipart file upload via FastAPI
+  - Storage: Temporarily stored in /tmp or working directory
+
+Step 2: Baseline Calibration (First Time Only)
+  - BaselineCalibrator initialized for user_id
+  - If no baseline exists:
+    * 3 neutral questions asked (optional pre-recording phase)
+    * Audio extracted, transcribed, emotion scores calculated
+    * Average baseline computed and stored to artifacts/baselines/
+
+Step 3: Facial Emotion Analysis
+  - OpenCV extracts frames at regular intervals (e.g., every 0.5 seconds)
+  - MediaPipe detects face landmarks in each frame
+  - CNN (TensorFlow) predicts emotion class probabilities
+  - Stress/fear score extracted and normalized to 0-100
+  - Grad-CAM heatmap generated showing attention regions
+  - Heatmap saved to outputs/gradcam/{session_id}.png
+
+Step 4: Speech Processing
+  - ffmpeg extracts audio stream from video
+  - scipy applies noise reduction (median filtering)
+  - Whisper transcribes audio → returns text + segment confidence
+  - TranscriptionResult.is_reliable determined (confidence >= 0.6?)
+  - IndicBERT classifies coercion from transcription
+  - SHAP explainer computes token-level importance
+  - Speech coercion score normalized to 0-100
+
+Step 5: Temporal Consistency Check
+  - TemporalConsistencyChecker analyzes all extracted scores
+  - Computes variance over time (across frames and segments)
+  - Detects coached/rehearsed patterns
+  - Returns status (Consistent / Moderate / Inconsistent)
+
+Step 6: Multimodal Fusion
+  - MetaLearnerFusion combines facial and speech scores
+  - If is_reliable = False: Apply confidence gating (0.8 facial, 0.2 speech)
+  - Otherwise: Apply learned or equal weights
+  - Output: Fused risk score (0-100)
+
+Step 7: Baseline Normalization
+  - If baseline exists:
+    * calibrated_score = (fused_score - baseline) / (1 - baseline)
+    * Rescale to 0-100
+  - If no baseline:
+    * Use raw fused_score
+
+Step 8: Risk Classification
+  - Map final score to category:
+    * 0-33 → Good (green)
+    * 34-66 → Average (yellow)
+    * 67-100 → Poor (red)
+
+Step 9: Results Assembly
+  - FastAPI assembles JSON response:
+    * risk_score (0-100)
+    * risk_category (Good / Average / Poor)
+    * facial_score, speech_score
+    * confidence (0-1)
+    * temporal_consistency (status, variance metrics)
+    * transcription_confidence
+    * shap_explanation (top tokens)
+    * gradcam_image_path
+    * baseline_comparison
+
+Step 10: Frontend Display
+  - Streamlit receives JSON results
+  - Renders Analysis Report page with all components
+  - Displays risk badge (color-coded)
+  - Shows Grad-CAM heatmap
+  - Renders SHAP token chart
+  - Shows temporal consistency status
+  - Displays temporal metrics chart (if applicable)
+  - Allows user to export report as PDF/JSON
+
+
+================================================================================
+SUMMARY - ALL MODELS USED IN SYSTEM
+================================================================================
+
+Model ID              Type         Framework    Purpose                  Location
+-----               -------      ---------    --------                 --------
+facial_emotion_cnn   Classification  TensorFlow   Emotion detection (5    models/
+                                                  class: fear, anxiety,   facial_emotion/
+                                                  distress, neutral,
+                                                  surprise)
+
+indic_bert           Classification  PyTorch/HF  Tamil coercion intent   models/
+                     (NLP)                        detection               nlp_tamil/
+
+whisper              Transcription   PyTorch/HF  Speech-to-text (Tamil   base model
+                                                  multi-language)         (via pip)
+                                                  + optional dialect
+
+whisper_dialect      Transcription   PyTorch/HF  Fine-tuned dialect-     models/
+                     (Optional)                   specific Tamil model    whisper_tamil_
+                                                                          dialect/
+
+meta_learner_fusion  Classification  scikit-learn Weighted fusion of     models/fusion/
+                                                  facial + speech scores  meta_learner.pkl
+
+face_detector        Detection       MediaPipe   Face landmark           built-in
+                                                  extraction              (mediapipe)
+
+================================================================================
+
+END OF DOCUMENT
+================================================================================

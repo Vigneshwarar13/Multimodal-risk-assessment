@@ -41,7 +41,7 @@ def verify_video(video_path: str) -> Dict[str, Any]:
     t0 = _log_stage("text cleaning", t0)
 
     # 3) NLP Intent (uses proper HF model id internally)
-    speech_intent, sentiment, coercion_flag = analyze_intent_score(transcript)
+    speech_intent, sentiment, coercion_flag, nlp_confidence, dialect_fallback, dialect_hint = analyze_intent_score(transcript)
     t0 = _log_stage("nlp intent", t0)
 
     # 4) Facial emotion from video
@@ -78,6 +78,9 @@ def verify_video(video_path: str) -> Dict[str, Any]:
         "emotion_score": float(emotion_score),
         "speech_intent_score": float(speech_intent),
         "voice_stress_score": float(v_stress),
+        "nlp_confidence": float(nlp_confidence),
+        "dialect_fallback": bool(dialect_fallback),
+        "dialect_hint": dialect_hint,
         "final_decision": final_label,
         "recommended_action": action,
     }

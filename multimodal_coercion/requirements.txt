@@ -22,3 +22,4 @@ fastapi>=0.110
 uvicorn>=0.24
 python-multipart>=0.0.9
 ffmpeg-python>=0.2.0
+shap>=0.42

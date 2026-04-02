@@ -647,6 +647,16 @@ def main():
                 f'<div class="transcript-box">{transcript}</div>',
                 unsafe_allow_html=True
             )
+
+            nlp_confidence = result.get("nlp_confidence", None)
+            dialect_fallback = result.get("dialect_fallback", None)
+            dialect_hint = result.get("dialect_hint", "Unknown")
+
+            if nlp_confidence is not None:
+                st.write(f"**NLP confidence:** {nlp_confidence:.2f}")
+            if dialect_fallback is not None:
+                st.write(f"**Dialect fallback used:** {dialect_fallback}")
+            st.write(f"**Dialects detected:** {dialect_hint}")
             
             col_copy1, col_copy2, col_copy3 = st.columns([1, 1, 1])
             with col_copy2:
@@ -659,6 +669,31 @@ def main():
             
             emotion_summary = result.get("emotion_summary", "No emotion data available")
             st.info(emotion_summary)
+
+            # Temporal Consistency
+            st.markdown('---')
+            st.markdown('<h2 class="section-title">⌛ Temporal Consistency</h2>', unsafe_allow_html=True)
+            temporal = result.get("temporal_consistency", None)
+            if temporal:
+                st.metric("Consistency Status", temporal.get("status", "Unknown"))
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Stress Variance", f"{temporal.get('stress_variance', 0.0):.3f}")
+                c2.metric("Fear Variance", f"{temporal.get('fear_variance', 0.0):.3f}")
+                c3.metric("Inconsistency", f"{temporal.get('inconsistency_score', 0.0):.3f}")
+
+                if st.checkbox("Show temporal profile (sample)", key="temporal_profile"):
+                    stress_series = result.get("stress_series", [])
+                    fear_series = result.get("fear_series", [])
+                    if stress_series and fear_series:
+                        fig_ts = go.Figure()
+                        fig_ts.add_trace(go.Scatter(x=list(range(len(stress_series))), y=stress_series, mode='lines+markers', name='Stress'))
+                        fig_ts.add_trace(go.Scatter(x=list(range(len(fear_series))), y=fear_series, mode='lines+markers', name='Fear'))
+                        fig_ts.update_layout(title="Stress/Fear time series", xaxis_title="Frame", yaxis_title="Probability")
+                        st.plotly_chart(fig_ts, use_container_width=True, config={'displayModeBar': False})
+                    else:
+                        st.warning("Temporal series data not available. Enable DEBUG_FRAMES in runtime environment to capture sample-level details.")
+            else:
+                st.info("Temporal consistency data is not available in the current pipeline results.")
 
             # Recommendation
             st.markdown('---')
