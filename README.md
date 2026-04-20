@@ -351,7 +351,7 @@ Contributions welcome! Please:
 
 - **Issues**: GitHub Issues
 - **Documentation**: See `docs/` folder
-- **Questions**: Contact [team@example.com]
+- **Questions**: Contact [vigneshwarar13@gmail.com]
 
 ---
 
